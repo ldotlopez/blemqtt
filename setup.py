@@ -35,7 +35,8 @@ setup(
     url="https://github.com/ldotlopez/blemqtt",
     license="LICENSE.txt",
     description=("Bluetooth low-enegy MQTT bridge"),
-    # long_description=open('README.md').read(),
+    long_description=open('README.md').read(),
+    long_description_content_type='text/x-markdown',
     install_requires=["dbus-python", "pygobject", "paho-mqtt"],
     entry_points={"console_scripts": ["blemqtt=blemqtt.__main__:main"]},
 )

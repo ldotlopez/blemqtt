@@ -33,7 +33,7 @@ except ImportError:
     import sys
     import warnings
 
-    warnings.warn("voluptuous and yaml required to use command line interface")
+    warnings.warn("voluptuous and pyyaml are required to use the command line interface")
     sys.exit(255)
 
 
