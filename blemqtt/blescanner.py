@@ -1,3 +1,24 @@
+#!/usr/bin/env python3
+# -*- encoding: utf-8 -*-
+
+# Copyright (C) 2021 Luis López <luis@cuarentaydos.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
+
+import datetime
 import functools
 import logging
 import threading
@@ -34,14 +55,7 @@ class BLEScanner(threading.Thread):
         self.loop = GLib.MainLoop()
 
     def run(self):
-        GLib.idle_add(add_return_value(self._scan_devices, False))
-
-        GLib.timeout_add_seconds(
-            1, add_return_value(self._check_join_req, True)
-        )
-        GLib.timeout_add_seconds(
-            self.SCAN_INTERVAL, add_return_value(self._scan_devices, True)
-        )
+        GLib.idle_add(add_return_value(self._scheduler, False))
         self.loop.run()
 
     def join(self, *args, **kwargs):
@@ -88,6 +102,31 @@ class BLEScanner(threading.Thread):
         if self.join_req.is_set():
             self.loop.quit()
 
+    def _scheduler(self):
+        time_left, timestamp = calc_next_slot(
+            self.SCAN_INTERVAL, self.START_DISCOVERY_WAIT + 1
+        )
+
+        # Schedule discovery starter
+        GLib.timeout_add_seconds(
+            time_left - self.START_DISCOVERY_WAIT,
+            add_return_value(self._ensure_discovery, False),
+        )
+
+        # Schedule scan
+        GLib.timeout_add_seconds(
+            time_left,
+            add_return_value(self._scan_devices, False),
+        )
+
+        # Schedule next cron
+        GLib.timeout_add_seconds(
+            time_left, add_return_value(self._scheduler, False)
+        )
+
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        _logger.debug(f"Next scan scheduled at {dt}")
+
 
 def get_interface(
     bus: dbus.Bus, objname: str, objpath: str, interface: str
@@ -118,6 +157,13 @@ def add_return_value(fn, ret):
         return ret
 
     return _wrapper
+
+
+def calc_next_slot(secs, margin=0):
+    now = int(time.mktime(time.localtime()))
+    next_slot = (((now + margin) // secs) * secs) + secs
+
+    return next_slot - now, next_slot
 
 
 class UnknowDeviceError(Exception):
