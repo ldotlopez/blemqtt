@@ -54,6 +54,9 @@ class BLEScanner(threading.Thread):
         self.join_req = threading.Event()
         self.loop = GLib.MainLoop()
 
+    #
+    # Thread stuff
+    #
     def run(self):
         GLib.idle_add(add_return_value(self._scheduler, False))
         self.loop.run()
@@ -62,46 +65,13 @@ class BLEScanner(threading.Thread):
         self.join_req.set()
         super().join(*args, **kwargs)
 
-    def _scan_devices(self):
-        _logger.debug(f"Scan devices on {self.adapter}")
-        self._ensure_discovery()
-
-        for address in self.devices:
-            address2 = address.replace(":", "_")
-            objpath = f"/org/bluez/{self.adapter}/dev_{address2}"
-            try:
-                props = get_properties_dict(
-                    self.bus,
-                    BLUEZ_NAME,
-                    objpath,
-                    BLUEZ_DEVICE1_IFACE,
-                )
-            except dbus.DBusException:
-                props = {}
-
-            self.q.put(
-                (address, "RSSI", int(props.get("RSSI", self.LOWEST_RSSI)))
-            )
-
-    def _ensure_discovery(self):
-        adapter_path = BLUEZ_ADAPTER_PATH.format(adapter=self.adapter)
-
-        adapter1 = get_interface(
-            self.bus, BLUEZ_NAME, adapter_path, BLUEZ_ADAPTER1_IFACE
-        )
-        props = get_properties_dict(
-            self.bus, BLUEZ_NAME, adapter_path, BLUEZ_ADAPTER1_IFACE
-        )
-
-        if not props["Discovering"]:
-            _logger.debug(f"Start discovery on {self.adapter}")
-            adapter1.StartDiscovery()
-            time.sleep(self.START_DISCOVERY_WAIT)
-
     def _check_join_req(self):
         if self.join_req.is_set():
             self.loop.quit()
 
+    #
+    # Scheduler
+    #
     def _scheduler(self):
         time_left, timestamp = calc_next_slot(
             self.SCAN_INTERVAL, self.START_DISCOVERY_WAIT + 1
@@ -110,7 +80,7 @@ class BLEScanner(threading.Thread):
         # Schedule discovery starter
         GLib.timeout_add_seconds(
             time_left - self.START_DISCOVERY_WAIT,
-            add_return_value(self._ensure_discovery, False),
+            add_return_value(self._start_discovery, False),
         )
 
         # Schedule scan
@@ -126,6 +96,58 @@ class BLEScanner(threading.Thread):
 
         dt = datetime.datetime.fromtimestamp(timestamp)
         _logger.debug(f"Next scan scheduled at {dt}")
+
+    #
+    # DBus stuff
+    #
+    def get_adapter1_iface(self) -> dbus.Interface:
+        adapter_path = BLUEZ_ADAPTER_PATH.format(adapter=self.adapter)
+        return get_interface(
+            self.bus, BLUEZ_NAME, adapter_path, BLUEZ_ADAPTER1_IFACE
+        )
+
+    def _start_discovery(self):
+        adapter1 = self.get_adapter1_iface()
+        props = get_iface_properties_dict(adapter1)
+        if not props["Discovering"]:
+            _logger.debug(f"Start discovery on {self.adapter}")
+            adapter1.StartDiscovery()
+
+    def _stop_discovery(self):
+        adapter1 = self.get_adapter1_iface()
+        props = get_iface_properties_dict(adapter1)
+        if props["Discovering"]:
+            _logger.debug(f"Stop discovery on {self.adapter}")
+            try:
+                # This method fails if we are not the starters?
+                adapter1.StopDiscovery()
+            except dbus.DBusException:
+                _logger.error("Unable to stop discovery")
+                return
+
+    def _scan_devices(self):
+        _logger.debug(f"Scan devices on {self.adapter}")
+
+        for address in self.devices:
+            underscored_address = address.replace(":", "_")
+            device_path = (
+                f"/org/bluez/{self.adapter}/dev_{underscored_address}"
+            )
+
+            try:
+                device1 = get_interface(
+                    self.bus, BLUEZ_NAME, device_path, BLUEZ_DEVICE1_IFACE
+                )
+                props = get_iface_properties_dict(device1)
+
+            except dbus.DBusException:
+                props = {}
+
+            self.q.put(
+                (address, "RSSI", int(props.get("RSSI", self.LOWEST_RSSI)))
+            )
+
+        self._stop_discovery()
 
 
 def get_interface(
@@ -148,6 +170,12 @@ def get_properties_dict(
 ) -> dbus.Dictionary:
     props = get_properties(bus, objname, objpath)
     return props.GetAll(iface)
+
+
+def get_iface_properties_dict(iface: dbus.Interface) -> dbus.Dictionary:
+    return dbus.Interface(iface, DBUS_PROPERTIES_IFACE).GetAll(
+        iface.dbus_interface
+    )
 
 
 def add_return_value(fn, ret):
