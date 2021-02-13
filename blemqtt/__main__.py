@@ -20,7 +20,9 @@
 
 
 import queue
+import re
 import signal
+import socket
 import threading
 
 from .publisher import Publisher
@@ -40,6 +42,8 @@ except ImportError:
 
 
 CONFIG_SAMPLE = """
+nodename: raspberrypi
+
 adapter: hci0
 
 devices:
@@ -48,7 +52,7 @@ devices:
 
 mqtt:
   host: mqtt.local
-  topic_prefix: 'blemqtt/0'
+  topic_prefix: 'blemqtt'
 """
 
 
@@ -56,12 +60,32 @@ def _exit(forever, s, f):
     forever.set()
 
 
+def validate_word(w):
+    m = re.search(r"^[a-z0-9]+$", w, re.IGNORECASE)
+    if m:
+        return w
+    else:
+        raise vol.Invalid("This word is invalid.")
+
+
+def validate_bt_address(addr):
+    m = re.search(r"^([a-f0-9]{2}:){5}[a-f0-9]{2}$", addr, re.IGNORECASE)
+    if m:
+        return addr.upper()
+    else:
+        raise vol.Invalid("This address is invalid.")
+
+
 Schema = vol.Schema(
     {
-        vol.All("adapter"): str,
-        vol.All("devices"): [str],
+        vol.Required("nodename", default=socket.gethostname()): validate_word,
+        vol.All("adapter"): validate_word,
+        vol.All("devices"): [validate_bt_address],
         vol.All("mqtt"): vol.Schema(
-            {vol.Optional("host"): str, "topic_prefix": str},
+            {
+                vol.Required("host", default="localhost"): str,
+                vol.Required("topic_prefix", default="blemqtt"): validate_word,
+            },
             extra=vol.ALLOW_EXTRA,
         ),
     }
@@ -93,14 +117,22 @@ def main():
 
     elif args.config:
         config = Schema(yaml.load(args.config, Loader=yaml.Loader))
+        from pprint import pprint
 
+        pprint(config)
+        sys.exit(255)
         q = queue.Queue()
 
         scanner = Scanner(
             q, adapter=config["adapter"], devices=config["devices"]
         )
 
-        publisher = Publisher(q, topic_prefix=config["mqtt"]["topic_prefix"])
+        publisher = Publisher(
+            q,
+            topic_prefix=(
+                f"{config['mqtt']['topic_prefix']}/{config['nodename']}"
+            ),
+        )
         publisher.connect(host=config["mqtt"]["host"])
 
         scanner.start()
