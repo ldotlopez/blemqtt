@@ -22,9 +22,8 @@
 import logging
 import sys
 
-from .blescanner import BLEScanner
 from .publisher import Publisher
-
+from .scanner import Scanner
 
 formatter = logging.Formatter(
     fmt="%(asctime)s %(levelname)s %(name)s - %(message)s",
@@ -39,4 +38,4 @@ logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
 
-__all__ = ["BLEScanner", "Publisher"]
+__all__ = ["Scanner", "Publisher"]

@@ -18,13 +18,13 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 # USA.
 
+
 import queue
-# from typing import List, Tuple
 import signal
 import threading
 
-from .blescanner import BLEScanner
 from .publisher import Publisher
+from .scanner import Scanner
 
 try:
     import yaml
@@ -33,7 +33,9 @@ except ImportError:
     import sys
     import warnings
 
-    warnings.warn("voluptuous and pyyaml are required to use the command line interface")
+    warnings.warn(
+        "voluptuous and pyyaml are required to use the command line interface"
+    )
     sys.exit(255)
 
 
@@ -94,7 +96,7 @@ def main():
 
         q = queue.Queue()
 
-        scanner = BLEScanner(
+        scanner = Scanner(
             q, adapter=config["adapter"], devices=config["devices"]
         )
 

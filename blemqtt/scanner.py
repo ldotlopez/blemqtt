@@ -18,16 +18,16 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 # USA.
 
+
 import datetime
 import functools
 import logging
 import threading
 import time
-from typing import List, Tuple
+from typing import List
 
 import dbus
 from gi.repository import GLib
-
 
 _logger = logging.getLogger("blemqtt.scanner")
 
@@ -40,12 +40,12 @@ BLUEZ_ADAPTER_PATH = "/org/bluez/{adapter}"
 BLUEZ_DEVICE1_IFACE = "org.bluez.Device1"
 
 
-class BLEScanner(threading.Thread):
+class Scanner(threading.Thread):
     START_DISCOVERY_WAIT = 15
     SCAN_INTERVAL = 60
     LOWEST_RSSI = -100
 
-    def __init__(self, q, *, adapter: str, devices: List[Tuple[str, str]]):
+    def __init__(self, q, *, adapter: str, devices: List[str]):
         super().__init__()
         self.q = q
         self.bus = dbus.SystemBus()
