@@ -41,8 +41,8 @@ BLUEZ_DEVICE1_IFACE = "org.bluez.Device1"
 
 
 class BLEScanner(threading.Thread):
-    START_DISCOVERY_WAIT = 5
-    SCAN_INTERVAL = 30
+    START_DISCOVERY_WAIT = 15
+    SCAN_INTERVAL = 60
     LOWEST_RSSI = -100
 
     def __init__(self, q, *, adapter: str, devices: List[Tuple[str, str]]):
