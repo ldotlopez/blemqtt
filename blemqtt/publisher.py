@@ -25,9 +25,7 @@ import threading
 
 from paho.mqtt import client
 
-logging.basicConfig()
-_LOGGER = logging.getLogger("publisher")
-_LOGGER.setLevel(logging.DEBUG)
+_logger = logging.getLogger("blemqtt.publisher")
 
 
 class Publisher(threading.Thread):
@@ -53,7 +51,7 @@ class Publisher(threading.Thread):
             address, key, value = ev
             topic = f"{self.topic_prefix}/{address}/{key}"
             self.mqtt.publish(topic, value)
-            _LOGGER.debug(f"Published '{topic}'='{value}'")
+            _logger.debug(f"Published '{topic}'='{value}'")
 
     def join(self, *args, **kwargs):
         self.join_req.set()

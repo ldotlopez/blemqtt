@@ -7,10 +7,8 @@ from typing import List, Tuple
 import dbus
 from gi.repository import GLib
 
-logging.basicConfig()
-_LOGGER = logging.getLogger("blescanner")
-_LOGGER.setLevel(logging.DEBUG)
 
+_logger = logging.getLogger("blemqtt.scanner")
 
 BLUEZ_NAME = "org.bluez"
 
@@ -51,7 +49,7 @@ class BLEScanner(threading.Thread):
         super().join(*args, **kwargs)
 
     def _scan_devices(self):
-        _LOGGER.debug(f"Scan devices on {self.adapter}")
+        _logger.debug(f"Scan devices on {self.adapter}")
         self._ensure_discovery()
 
         for address in self.devices:
@@ -82,7 +80,7 @@ class BLEScanner(threading.Thread):
         )
 
         if not props["Discovering"]:
-            _LOGGER.debug("Start discovery on {self.adapter}")
+            _logger.debug(f"Start discovery on {self.adapter}")
             adapter1.StartDiscovery()
             time.sleep(self.START_DISCOVERY_WAIT)
 

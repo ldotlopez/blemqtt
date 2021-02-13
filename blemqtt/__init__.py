@@ -19,7 +19,24 @@
 # USA.
 
 
+import logging
+import sys
+
 from .blescanner import BLEScanner
 from .publisher import Publisher
+
+
+formatter = logging.Formatter(
+    fmt="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+handler = logging.StreamHandler(stream=sys.stderr)
+handler.setFormatter(formatter)
+
+logger = logging.getLogger("blemqtt")
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
+
 
 __all__ = ["BLEScanner", "Publisher"]
