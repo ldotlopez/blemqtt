@@ -24,6 +24,7 @@ import re
 import signal
 import socket
 import threading
+import logging
 
 from .publisher import Publisher
 from .scanner import Scanner
@@ -40,6 +41,8 @@ except ImportError:
     )
     sys.exit(255)
 
+_logger = logging.getLogger("blemqtt")
+
 
 CONFIG_SAMPLE = """
 nodename: raspberrypi
@@ -49,6 +52,10 @@ adapter: hci0
 devices:
   - '00:11:22:33:44:55'
   - 'AA:BB:CC:DD:EE:FF'
+
+scan_interval: 60
+
+rssi_value_on_missing: -100
 
 mqtt:
   host: mqtt.local
@@ -76,11 +83,34 @@ def validate_bt_address(addr):
         raise vol.Invalid("This address is invalid.")
 
 
+def rssi_value_on_missing_val(x):
+    if x is None:
+        return x
+
+    try:
+        return int(x)
+    except (ValueError, TypeError) as e:
+        raise vol.Invalid(f"rssi_value_on_missing must be None or int") from e
+
+
+def validate_scan_interval(x):
+    if x < 15:
+        _logger.warning(
+            f"Scan interval must be at least 15s (current: {scan_interval}"
+        )
+
+    return max(x, 15)
+
+
 Schema = vol.Schema(
     {
         vol.Required("nodename", default=socket.gethostname()): validate_word,
         vol.All("adapter"): validate_word,
         vol.All("devices"): [validate_bt_address],
+        vol.All("scan_interval", default=60): lambda x: max(15, int(x)),
+        vol.Optional(
+            "rssi_value_on_missing", default=None
+        ): rssi_value_on_missing_val,
         vol.All("mqtt"): vol.Schema(
             {
                 vol.Required("host", default="localhost"): str,
@@ -117,14 +147,15 @@ def main():
 
     elif args.config:
         config = Schema(yaml.load(args.config, Loader=yaml.Loader))
-        from pprint import pprint
 
-        pprint(config)
-        sys.exit(255)
         q = queue.Queue()
 
         scanner = Scanner(
-            q, adapter=config["adapter"], devices=config["devices"]
+            q,
+            adapter=config["adapter"],
+            devices=config["devices"],
+            scan_interval=config["scan_interval"],
+            rssi_value_on_missing=config["rssi_value_on_missing"],
         )
 
         publisher = Publisher(

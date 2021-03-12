@@ -24,7 +24,7 @@ import functools
 import logging
 import threading
 import time
-from typing import List
+from typing import List, Optional
 
 import dbus
 from gi.repository import GLib
@@ -41,16 +41,25 @@ BLUEZ_DEVICE1_IFACE = "org.bluez.Device1"
 
 
 class Scanner(threading.Thread):
-    START_DISCOVERY_WAIT = 15
-    SCAN_INTERVAL = 60
+    START_DISCOVERY_WAIT = 5
     LOWEST_RSSI = -100
 
-    def __init__(self, q, *, adapter: str, devices: List[str]):
+    def __init__(
+        self,
+        q,
+        *,
+        adapter: str,
+        devices: List[str],
+        scan_interval: int,
+        rssi_value_on_missing: Optional[int],
+    ):
         super().__init__()
         self.q = q
         self.bus = dbus.SystemBus()
         self.adapter = adapter
         self.devices = devices or []
+        self.scan_interval = scan_interval
+        self.rssi_value_on_missing = rssi_value_on_missing
         self.join_req = threading.Event()
         self.loop = GLib.MainLoop()
 
@@ -74,7 +83,7 @@ class Scanner(threading.Thread):
     #
     def _scheduler(self):
         time_left, timestamp = calc_next_slot(
-            self.SCAN_INTERVAL, self.START_DISCOVERY_WAIT + 1
+            self.scan_interval, self.START_DISCOVERY_WAIT + 1
         )
 
         # Schedule discovery starter
@@ -111,6 +120,7 @@ class Scanner(threading.Thread):
         props = get_iface_properties_dict(adapter1)
         if not props["Discovering"]:
             _logger.debug(f"Start discovery on {self.adapter}")
+            adapter1.SetDiscoveryFilter({"Transport": "le"})
             adapter1.StartDiscovery()
 
     def _stop_discovery(self):
@@ -141,11 +151,12 @@ class Scanner(threading.Thread):
                 props = get_iface_properties_dict(device1)
 
             except dbus.DBusException:
+                _logger.warning(f"{address} not found")
                 props = {}
 
-            self.q.put(
-                (address, "RSSI", int(props.get("RSSI", self.LOWEST_RSSI)))
-            )
+            rssi = props.get("RSSI", self.rssi_value_on_missing)
+            if rssi:
+                self.q.put((address, "RSSI", int(rssi)))
 
         self._stop_discovery()
 
