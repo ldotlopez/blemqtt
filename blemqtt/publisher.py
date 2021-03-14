@@ -21,6 +21,7 @@
 
 import logging
 import queue
+import socket
 import threading
 
 from paho.mqtt import client
@@ -33,11 +34,28 @@ class Publisher(threading.Thread):
         super().__init__()
         self.q = q
         self.topic_prefix = topic_prefix
+        self.host = host
         self.mqtt = client.Client(*args, **kwargs)
         self.join_req = threading.Event()
 
-    def connect(self, host, *args, **kwargs):
-        self.mqtt.connect(host, *args, **kwargs)
+    def connect(self):
+        try:
+            self.mqtt.connect(self.host)
+            return
+        except ConnectionRefusedError:
+            _logger.error(
+                f"Unable to connect to '{self.host}': connection refused"
+            )
+        except socket.gaierror as e:
+            _logger.error(f"Unable to connect to '{self.host}': {e.strerror}")
+
+        raise ConnectError()
+
+    def publish(self, topic, value):
+        if not self.mqtt.is_connected():
+            self.connect()
+
+        self.mqtt.publish(topic, value)
 
     def run(self):
         while True:
@@ -50,9 +68,20 @@ class Publisher(threading.Thread):
 
             address, key, value = ev
             topic = f"{self.topic_prefix}/{address}/{key}"
-            self.mqtt.publish(topic, value)
-            _logger.debug(f"Published '{topic}'='{value}'")
+            try:
+                self.publish(topic, value)
+                _logger.debug(f"Published '{topic}'='{value}'")
+            except ConnectError:
+                pass
 
     def join(self, *args, **kwargs):
         self.join_req.set()
         super().join(*args, **kwargs)
+
+
+class _BaseException(Exception):
+    pass
+
+
+class ConnectError(_BaseException):
+    pass

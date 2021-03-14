@@ -19,12 +19,12 @@
 # USA.
 
 
+import logging
+import platform
 import queue
 import re
 import signal
-import socket
 import threading
-import logging
 
 from .publisher import Publisher
 from .scanner import Scanner
@@ -90,21 +90,20 @@ def rssi_value_on_missing_val(x):
     try:
         return int(x)
     except (ValueError, TypeError) as e:
-        raise vol.Invalid(f"rssi_value_on_missing must be None or int") from e
+        raise vol.Invalid("rssi_value_on_missing must be None or int") from e
 
 
 def validate_scan_interval(x):
     if x < 15:
-        _logger.warning(
-            f"Scan interval must be at least 15s (current: {scan_interval}"
-        )
+        _logger.warning(f"Scan interval must be at least 15s (current: {x})")
 
     return max(x, 15)
 
 
 Schema = vol.Schema(
     {
-        vol.Required("nodename", default=socket.gethostname()): validate_word,
+        # socket.gethostname requires an active network connection.
+        vol.Required("nodename", default=platform.node()): validate_word,
         vol.All("adapter"): validate_word,
         vol.All("devices"): [validate_bt_address],
         vol.All("scan_interval", default=60): lambda x: max(15, int(x)),
@@ -163,14 +162,15 @@ def main():
             topic_prefix=(
                 f"{config['mqtt']['topic_prefix']}/{config['nodename']}"
             ),
+            host=config["mqtt"]["host"],
         )
-        publisher.connect(host=config["mqtt"]["host"])
 
         scanner.start()
         publisher.start()
 
         forever = threading.Event()
         signal.signal(signal.SIGINT, lambda s, f: _exit(forever, s, f))
+        signal.signal(signal.SIGTERM, lambda s, f: _exit(forever, s, f))
         forever.wait()
 
         scanner.join()

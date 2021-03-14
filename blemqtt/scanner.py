@@ -67,6 +67,9 @@ class Scanner(threading.Thread):
     # Thread stuff
     #
     def run(self):
+        GLib.timeout_add(
+            0.1 * 1000, add_return_value(self._check_join_req, True)
+        )
         GLib.idle_add(add_return_value(self._scheduler, False))
         self.loop.run()
 
